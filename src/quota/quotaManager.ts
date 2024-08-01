@@ -5,8 +5,8 @@ import { Quota } from './quota';
 /** keep track of API invocations, allowing or disallowing them based on our quota */
 export class QuotaManager {
   protected _activeCount = 0;
+  protected _isClosed = false;
   protected history = new Dequeue<number>();
-  private isClosed = false;
 
   constructor(protected _quota: Quota) {
     if (typeof _quota !== 'object') {
@@ -72,9 +72,9 @@ export class QuotaManager {
 
   /** Closes this quota manager */
   close() {
-    if (this.isClosed) return;
+    if (this._isClosed) return;
     this.cleanup();
-    this.isClosed = true;
+    this._isClosed = true;
   }
 
   protected cleanup() {
@@ -89,7 +89,7 @@ export class QuotaManager {
   }
 
   protected throwIfClosed() {
-    if (this.isClosed) {
+    if (this._isClosed) {
       throw new AlreadyClosedError('Quota manager has been closed and cannot be used');
     }
   }

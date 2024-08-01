@@ -64,6 +64,7 @@ export class RedisQuotaManager extends QuotaManager {
   }
 
   protected /*override*/ cleanup() {
+    super.cleanup();
     if (this.heartbeatTimer != null) {
       clearTimeout(this.heartbeatTimer);
     }
@@ -145,6 +146,7 @@ export class RedisQuotaManager extends QuotaManager {
 
   /** Let the others know we’re here */
   private heartbeat() {
+    if(this._isClosed) return;
     this.ping();
     if (this.ready) {
       this.updateQuota();

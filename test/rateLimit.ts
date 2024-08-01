@@ -6,6 +6,7 @@ import { Quota, QuotaManager, RedisQuotaManager } from '../src';
 import { pRateLimit } from '../src/rateLimit';
 import { RateLimitTimeoutError } from '../src/rateLimitTimeoutError';
 import { sleep, uniqueId } from '../src/util';
+import { AlreadyClosedError } from '../src/alreadyClosedError';
 
 // testing requires a real Redis server
 // fakeredis, redis-mock, redis-js, etc. have missing or broken client.duplicate()
@@ -42,20 +43,20 @@ function mockApi(sleepTime: number) {
   return fn;
 }
 
-test('can construct from a Quota object', async t => {
+test('can construct from a Quota object', async (t) => {
   const quota: Quota = { concurrency: 2 };
   const rateLimit = pRateLimit(quota);
   t.truthy(rateLimit);
 });
 
-test('can construct from a QuotaManager object', async t => {
+test('can construct from a QuotaManager object', async (t) => {
   const quota: Quota = { concurrency: 2 };
   const qm = new QuotaManager(quota);
   const rateLimit = pRateLimit(qm);
   t.truthy(rateLimit);
 });
 
-test('concurrency is enforced', async t => {
+test('concurrency is enforced', async (t) => {
   const quota: Quota = { concurrency: 2 };
   const rateLimit = pRateLimit(quota);
 
@@ -64,9 +65,9 @@ test('concurrency is enforced', async t => {
   const startTime = Date.now();
 
   const promises = [
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()) // 500-1000 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 500-1000 ms
   ];
 
   while (true) {
@@ -83,7 +84,7 @@ test('concurrency is enforced', async t => {
   }
 });
 
-test('rate limits are enforced', async t => {
+test('rate limits are enforced', async (t) => {
   const quota: Quota = { interval: 500, rate: 3 };
   const quotaManager = new QuotaManager(quota);
   const rateLimit = pRateLimit(quotaManager);
@@ -93,11 +94,11 @@ test('rate limits are enforced', async t => {
   const startTime = Date.now();
 
   const promises = [
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 500-1000 ms
-    rateLimit(() => api()) // 500-1000 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 500-1000 ms
+    rateLimit.limiter(() => api()), // 500-1000 ms
   ];
 
   while (true) {
@@ -117,7 +118,7 @@ test('rate limits are enforced', async t => {
   }
 });
 
-test('combined rate limits and concurrency are enforced', async t => {
+test('combined rate limits and concurrency are enforced', async (t) => {
   const quota: Quota = { interval: 1000, rate: 3, concurrency: 2 };
   const quotaManager = new QuotaManager(quota);
   const rateLimit = pRateLimit(quotaManager);
@@ -127,11 +128,11 @@ test('combined rate limits and concurrency are enforced', async t => {
   const startTime = Date.now();
 
   const promises = [
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 0-500 ms
-    rateLimit(() => api()), // 500-1000 ms
-    rateLimit(() => api()), // 1000-1500 ms
-    rateLimit(() => api()) // 1000-1500 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 0-500 ms
+    rateLimit.limiter(() => api()), // 500-1000 ms
+    rateLimit.limiter(() => api()), // 1000-1500 ms
+    rateLimit.limiter(() => api()), // 1000-1500 ms
   ];
 
   while (true) {
@@ -154,10 +155,10 @@ test('combined rate limits and concurrency are enforced', async t => {
   }
 });
 
-test('API calls are queued until RedisQuotaManager is ready', async t => {
+test('API calls are queued until RedisQuotaManager is ready', async (t) => {
   const clients: RedisClient[] = [
     redis.createClient(REDIS_PORT, REDIS_SERVER),
-    redis.createClient(REDIS_PORT, REDIS_SERVER)
+    redis.createClient(REDIS_PORT, REDIS_SERVER),
   ];
   const quota: Quota = { rate: 300, interval: 1000, concurrency: 100 };
   const qm: RedisQuotaManager = new RedisQuotaManager(quota, uniqueId(), clients);
@@ -167,11 +168,11 @@ test('API calls are queued until RedisQuotaManager is ready', async t => {
   const api = mockApi(500);
 
   const promises = [
-    rateLimit(() => api()),
-    rateLimit(() => api()),
-    rateLimit(() => api()),
-    rateLimit(() => api()),
-    rateLimit(() => api())
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api()),
   ];
 
   t.is(qm.activeCount, 0);
@@ -188,25 +189,25 @@ test('API calls are queued until RedisQuotaManager is ready', async t => {
   t.is(api['fulfillCount'], promises.length, 'all of the jobs are completed');
 });
 
-test('can handle API calls that reject', async t => {
+test('can handle API calls that reject', async (t) => {
   const quota: Quota = { interval: 500, rate: 10, concurrency: 10 };
   const rateLimit = pRateLimit(quota);
 
   const api = mockApi(200);
 
   const promises = [
-    rateLimit(() => api()),
-    rateLimit(() => api(new Error())),
-    rateLimit(() => api()),
-    rateLimit(() => api(new Error())),
-    rateLimit(() => api())
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api(new Error())),
+    rateLimit.limiter(() => api()),
+    rateLimit.limiter(() => api(new Error())),
+    rateLimit.limiter(() => api()),
   ];
 
   await t.throwsAsync(Promise.all(promises));
 
   // wait for them all to complete (rejected or not)
   await Promise.all(
-    promises.map(async p => {
+    promises.map(async (p) => {
       try {
         await p;
       } catch {
@@ -219,58 +220,58 @@ test('can handle API calls that reject', async t => {
   t.is(api['fulfillCount'], 3, '3 Promises were fulfilled');
 });
 
-test('API calls that wait too long are rejected', async t => {
+test('API calls that wait too long are rejected', async (t) => {
   const quota: Quota = {
     interval: 1000,
     rate: 1,
     concurrency: 1,
-    maxDelay: 500
+    maxDelay: 500,
   };
   const rateLimit = pRateLimit(quota);
 
   const api = mockApi(200);
 
-  const fn1 = rateLimit(() => api());
-  const fn2 = rateLimit(() => api());
+  const fn1 = rateLimit.limiter(() => api());
+  const fn2 = rateLimit.limiter(() => api());
 
   await t.notThrowsAsync(fn1);
   await t.throwsAsync(fn2, { instanceOf: RateLimitTimeoutError });
 });
 
-test('Setting maxDelay to 0 disables maxDelay rejection', async t => {
+test('Setting maxDelay to 0 disables maxDelay rejection', async (t) => {
   const quota: Quota = { interval: 1000, rate: 1, concurrency: 1, maxDelay: 0 };
   const rateLimit = pRateLimit(quota);
 
   const api = mockApi(200);
 
-  const fn1 = rateLimit(() => api());
-  const fn2 = rateLimit(() => api());
+  const fn1 = rateLimit.limiter(() => api());
+  const fn2 = rateLimit.limiter(() => api());
 
   await t.notThrowsAsync(fn1);
   await t.notThrowsAsync(fn2);
 });
 
-test('Continues running the queue after a maxDelay timeout', async t => {
+test('Continues running the queue after a maxDelay timeout', async (t) => {
   const quota: Quota = {
     interval: 1000,
     rate: 1,
     concurrency: 1,
-    maxDelay: 500
+    maxDelay: 500,
   };
   const rateLimit = pRateLimit(quota);
 
   const api = mockApi(200);
 
-  const fn1 = rateLimit(() => api());
-  const fn2 = rateLimit(() => api());
-  const fn3 = rateLimit(() => api());
+  const fn1 = rateLimit.limiter(() => api());
+  const fn2 = rateLimit.limiter(() => api());
+  const fn3 = rateLimit.limiter(() => api());
 
   await t.notThrowsAsync(fn1);
   await t.throwsAsync(fn2, { instanceOf: RateLimitTimeoutError });
   await t.throwsAsync(fn3, { instanceOf: RateLimitTimeoutError });
 });
 
-test.serial('Passing no quota is a no-op', async t => {
+test.serial('Passing no quota is a no-op', async (t) => {
   const consoleWarn = td.replace(console, 'warn');
   try {
     // TypeScript won’t allow this but it’s possible in JavaScript
@@ -289,7 +290,7 @@ test.serial('Passing no quota is a no-op', async t => {
   }
 });
 
-test.serial('Passing no quota prints a console warning', async t => {
+test.serial('Passing no quota prints a console warning', async (t) => {
   const consoleWarn = td.replace(console, 'warn');
   try {
     // TypeScript won’t allow this but it’s possible in JavaScript
@@ -303,7 +304,7 @@ test.serial('Passing no quota prints a console warning', async t => {
   }
 });
 
-test('Using an empty quota is a no-op', async t => {
+test('Using an empty quota is a no-op', async (t) => {
   const quota: Quota = {};
   const rateLimit = pRateLimit(quota);
 
@@ -316,3 +317,13 @@ test('Using an empty quota is a no-op', async t => {
 
   await t.notThrowsAsync(Promise.all(promises));
 });
+
+test('A cleaned up rate limiter can no longer be used', async (t) => {
+  const quota: Quota = {};
+  const { cleanup: cleanupFn, limiter} = pRateLimit(quota);
+  await cleanupFn();
+
+  const api = mockApi(200);
+  const fn = limiter(() => api());
+  await t.throwsAsync(fn, { instanceOf: AlreadyClosedError });
+})

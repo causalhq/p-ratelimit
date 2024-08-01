@@ -1,3 +1,4 @@
+import { AlreadyClosedError } from './alreadyClosedError';
 import { Dequeue } from './dequeue';
 import { Quota } from './quota/quota';
 import { QuotaManager } from './quota/quotaManager';
@@ -5,16 +6,31 @@ import { RateLimitTimeoutError } from './rateLimitTimeoutError';
 
 export function pRateLimit(
   quotaManager: QuotaManager | Quota
-): <T>(fn: () => Promise<T>) => Promise<T> {
+): {
+  /** Function to run a function under the limiter. */
+  limiter: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Function used to cleanup the rate limiter and associated quota manager.
+   * After cleaning up, the rate limiter can no longer be used.
+   */
+  cleanup: () => Promise<void>;
+} {
   if (!(quotaManager instanceof QuotaManager)) {
     return pRateLimit(new QuotaManager(quotaManager));
   }
+
+  let isClosed = false;
+  const cleanupFn = async () => {
+    if (isClosed) return;
+    quotaManager.close();
+    isClosed = true;
+  };
 
   const queue = new Dequeue<Function>();
   let timerId: NodeJS.Timer = null;
 
   const next = () => {
-    while (queue.length && quotaManager.start()) {
+    while (!isClosed && queue.length && quotaManager.start()) {
       queue.shift()();
     }
 
@@ -26,8 +42,11 @@ export function pRateLimit(
     }
   };
 
-  return <T>(fn: () => Promise<T>) => {
+  const limiter = <T>(fn: () => Promise<T>) => {
     return new Promise<T>((resolve, reject) => {
+      if (isClosed)
+        throw new AlreadyClosedError('Limiter has been closed and cannot be used');
+
       let timerId: NodeJS.Timer = null;
       if (quotaManager.maxDelay) {
         timerId = setTimeout(() => {
@@ -48,11 +67,11 @@ export function pRateLimit(
         }
 
         fn()
-          .then(val => {
+          .then((val) => {
             quotaManager.end();
             resolve(val);
           })
-          .catch(err => {
+          .catch((err) => {
             quotaManager.end();
             reject(err);
           })
@@ -65,4 +84,6 @@ export function pRateLimit(
       next();
     });
   };
+
+  return { limiter, cleanup: cleanupFn };
 }

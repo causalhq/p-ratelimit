@@ -3,7 +3,7 @@ import { Quota, QuotaManager } from '../src';
 import { sleep } from '../src/util';
 import test from 'ava';
 
-test('invocations are logged', async t => {
+test('invocations are logged', async (t) => {
   const quota: Quota = { rate: 3, interval: 500, concurrency: 2 };
   const qm: QuotaManager = new QuotaManager(quota);
 
@@ -21,7 +21,7 @@ test('invocations are logged', async t => {
   t.is(qm.activeCount, 0, 'all jobs done');
 });
 
-test('throws if an incomplete rate-limit quota is used', t => {
+test('throws if an incomplete rate-limit quota is used', (t) => {
   t.throws(() => new QuotaManager({ interval: 100 }), { message: /Invalid Quota/ });
   t.throws(() => new QuotaManager({ rate: 42 }), { message: /Invalid Quota/ });
 });

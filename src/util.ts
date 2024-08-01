@@ -5,11 +5,11 @@ export function uniqueId() {
 }
 
 export function sleep(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms));
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 export function promisify(fn) {
-  return function(...args) {
+  return function (...args) {
     return new Promise<any>((resolve, reject) => {
       fn.apply(
         null,

@@ -22,7 +22,7 @@ export class Dequeue<T> {
     const newNode: Node<T> = {
       value,
       prev: this.tail,
-      next: undefined
+      next: undefined,
     };
 
     if (this._length) {
@@ -51,7 +51,7 @@ export class Dequeue<T> {
     const newNode: Node<T> = {
       value,
       prev: undefined,
-      next: this.head
+      next: this.head,
     };
 
     if (this._length) {

@@ -1,10 +1,12 @@
+import { AlreadyClosedError } from '../alreadyClosedError';
 import { Dequeue } from '../dequeue';
 import { Quota } from './quota';
 
 /** keep track of API invocations, allowing or disallowing them based on our quota */
 export class QuotaManager {
   protected _activeCount = 0;
-  protected history = new Dequeue();
+  protected history = new Dequeue<number>();
+  private isClosed = false;
 
   constructor(protected _quota: Quota) {
     if (typeof _quota !== 'object') {
@@ -45,6 +47,8 @@ export class QuotaManager {
    * @returns true if the invocation was allowed, false if not (you can try again later)
    */
   start() {
+    this.throwIfClosed();
+
     if (this._activeCount >= this._quota.concurrency) {
       return false;
     }
@@ -66,10 +70,27 @@ export class QuotaManager {
     this._activeCount--;
   }
 
+  /** Closes this quota manager */
+  close() {
+    if (this.isClosed) return;
+    this.cleanup();
+    this.isClosed = true;
+  }
+
+  protected cleanup() {
+    // do nothing
+  }
+
   protected removeExpiredHistory() {
     const expired = Date.now() - this._quota.interval;
     while (this.history.length && this.history.peekFront() < expired) {
       this.history.shift();
+    }
+  }
+
+  protected throwIfClosed() {
+    if (this.isClosed) {
+      throw new AlreadyClosedError('Quota manager has been closed and cannot be used');
     }
   }
 }

@@ -32,7 +32,7 @@ export class RedisQuotaManager extends QuotaManager {
     // start with 0 concurrency so jobs don’t run until we’re ready
     super(
       Object.assign({}, channelQuota, {
-        concurrency: channelQuota.fastStart ? channelQuota.concurrency : 0
+        concurrency: channelQuota.fastStart ? channelQuota.concurrency : 0,
       })
     );
     this._ready = Boolean(channelQuota.fastStart);
@@ -63,6 +63,12 @@ export class RedisQuotaManager extends QuotaManager {
     return this._ready;
   }
 
+  protected /*override*/ cleanup() {
+    if (this.heartbeatTimer != null) {
+      clearTimeout(this.heartbeatTimer);
+    }
+  }
+
   /** Join the client pool, coordinated by the shared channel on Redis */
   private async register() {
     this.pingsReceived.set(this.uniqueId, Date.now());
@@ -78,7 +84,7 @@ export class RedisQuotaManager extends QuotaManager {
       await sleep(3000);
     }
 
-    await this.updateQuota();
+    this.updateQuota();
     this._ready = true;
 
     this.heartbeatTimer = setInterval(() => this.heartbeat(), this.heartbeatInterval);

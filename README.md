@@ -10,25 +10,25 @@ It works with any API function that returns a Promise.
 
 ## Install
 
-```
+```shell
 $ npm i p-ratelimit
 ```
 
 ## What’s different
 
 * **True rate limiting**
-    * Utilities like [p-limit](https://github.com/sindresorhus/p-limit) control how many functions are running concurrently. That won’t prevent you from exceeding limits on APIs that use token-bucket throttling.
-    * **p-ratelimit** supports both concurrency and rate limits.
+  * Utilities like [p-limit](https://github.com/sindresorhus/p-limit) control how many functions are running concurrently. That won’t prevent you from exceeding limits on APIs that use token-bucket throttling.
+  * **p-ratelimit** supports both concurrency and rate limits.
 * **Works across API families**
-    * Utilities like [Lodash throttle](https://lodash.com/docs#throttle) create separate quotas for each API function.
-    * **p-ratelimit** can enforce a single shared quota for all functions in an API family.
+  * Utilities like [Lodash throttle](https://lodash.com/docs#throttle) create separate quotas for each API function.
+  * **p-ratelimit** can enforce a single shared quota for all functions in an API family.
 * **Minimal implementation**
-    * Utilities like [limiter](https://github.com/jhurliman/node-rate-limiter) provide low-level tooling that requires you to manage tokens and provide your own queue.
-    * **p-ratelimit** requires minimal modification to your existing code.
+  * Utilities like [limiter](https://github.com/jhurliman/node-rate-limiter) provide low-level tooling that requires you to manage tokens and provide your own queue.
+  * **p-ratelimit** requires minimal modification to your existing code.
 * **Distributed rate limits**
-    * If you use Redis, **p-ratelimit** supports efficient rate limiting across multiple hosts. The quota is divided among your pool of servers. As servers are added or removed, the shared quota is recaclulated.
+  * If you use Redis, **p-ratelimit** supports efficient rate limiting across multiple hosts. The quota is divided among your pool of servers. As servers are added or removed, the shared quota is recaclulated.
 * **Made for Promises and TypeScript friendly**
-    * A rate-limited function returns the same Promise type as the original function.
+  * A rate-limited function returns the same Promise type as the original function.
 
 ## Example
 
@@ -38,7 +38,7 @@ const { pRateLimit } = require('p-ratelimit');
 
 // create a rate limiter that allows up to 30 API calls per second,
 // with max concurrency of 10
-const limit = pRateLimit({
+const { limiter, cleanup } = pRateLimit({
     interval: 1000,             // 1000 ms == 1 second
     rate: 30,                   // 30 API calls per interval
     concurrency: 10,            // no more than 10 running at once
@@ -49,7 +49,7 @@ async function main() {
   // original WITHOUT rate limiter:
   result = await someFunction(42);
   // with rate limiter:
-  result = await limit(() => someFunction(42));
+  result = await limiter(() => someFunction(42));
 }
 
 main();
@@ -104,7 +104,7 @@ const qm = new RedisQuotaManager(
 );
 
 // Create a rate limiter that uses the RedisQuotaManager
-const limit = pRateLimit(qm);
+const { limiter } = pRateLimit(qm);
 
 // now use limit(…) as usual
 ```
@@ -112,6 +112,12 @@ const limit = pRateLimit(qm);
 Each server that registers with a given `channelName` will be allotted `1/(number of servers)` of the available quota. For example, if the pool consists of four servers, each will receive 1/4 the available quota.
 
 When a new server joins the pool, the quota is dynamically adjusted. If a server goes away, its quota is reallocated among the remaining servers within a few minutes.
+
+### Removing from pool
+
+If you no longer want your server to count towards the rate limit, you can clean up by invoking the `cleanup` function returned by `pRateLimit`. After invoking this function, the underlying RedisQuotaManager will be closed, which means it no longer publishes heartbeats to the channel, which in turn causes the remaining servers to re-adjust their quotas.
+
+Note that, once the `cleanup` function returns, the limiter will no longer be usable. If you try to use it, an `AlreadyClosedError` error will be thrown.
 
 ## License
 
